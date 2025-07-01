@@ -4,109 +4,137 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.location.Location;
+import android.util.AttributeSet;
 import android.view.View;
-
-import com.thirteen_lab.wifi_searcher.utls.heat_map.CellPosition;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.MainData;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.SignalGrid;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.WifiNetwork;
 
 public class GridView extends View {
 
-    private MainData mainData;
+    private Rect imageBounds = null;
     private Paint paint;
 
-    private WifiNetwork currentWifiNetwork;
-    private Location currentLocation;
+    private MainData mainData = null;
+    private WifiNetwork currentWifiNetwork = null;
+    private Location currentLocation = null;
 
-    public GridView(Context context, MainData mainData) {
+    public GridView(Context context) {
         super(context);
+        init();
+    }
 
+    public GridView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        init();
+    }
+
+    public GridView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        init();
+    }
+
+    private void init() {
+        paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    public void setImageBounds(int x, int y, int width, int height) {
+        imageBounds = new Rect(x, y, x + width, y + height);
+    }
+
+    public void setMainData(MainData mainData) {
         this.mainData = mainData;
-        this.paint = new Paint();
+    }
 
-        this.paint.setStyle(Paint.Style.FILL);
+    public void update(WifiNetwork wifiNetwork, Location location) {
+        if (wifiNetwork != null) {
+            this.currentWifiNetwork = wifiNetwork;
+        }
+        if (location != null) {
+            this.currentLocation = location;
+        }
+        invalidate();
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
 
-        paint.setColor(Color.rgb(255, 255, 255));
-        canvas.drawPaint(paint);
-
-        if (mainData == null || mainData.getGridInfo() == null || currentWifiNetwork == null)
+        if (mainData == null || currentWifiNetwork == null || mainData.getGridInfo() == null) {
             return;
+        }
 
-        int width = getWidth();
-        int height = getHeight();
+        GridInfo gridInfo = mainData.getGridInfo();
+        SignalGrid signalGrid = mainData.getSignalGrids().get(currentWifiNetwork);
+        if (signalGrid == null) return;
 
-        int rectangleWidth = (int) (width / (double) mainData.getGridInfo().getColumnsCount());
-        int rectangleHeight = (int) (height / (double) mainData.getGridInfo().getRowsCount());
+        int width = (imageBounds != null) ? imageBounds.width() : getWidth();
+        int height = (imageBounds != null) ? imageBounds.height() : getHeight();
+        int offsetX = (imageBounds != null) ? imageBounds.left : 0;
+        int offsetY = (imageBounds != null) ? imageBounds.top : 0;
 
-        for (int row = 0; row < mainData.getGridInfo().getRowsCount(); ++row)
-            for (int column = 0; column < mainData.getGridInfo().getColumnsCount(); ++column) {
+        int rectWidth = width / gridInfo.getColumnsCount();
+        int rectHeight = height / gridInfo.getRowsCount();
 
-                SignalGrid.SignalInfo signalInfo =
-                        mainData.getSignalGrids().get(currentWifiNetwork)
-                                .getSignalInfo(new CellPosition(row, column));
+        int rowsCount = gridInfo.getRowsCount();
+        int colsCount = gridInfo.getColumnsCount();
+
+        for (int row = 0; row < rowsCount; row++) {
+            for (int col = 0; col < colsCount; col++) {
+                // Wrap row and col indices
+                int wrappedRow = ((row % rowsCount) + rowsCount) % rowsCount;   // handles negative indices safely
+                int wrappedCol = ((col % colsCount) + colsCount) % colsCount;
+
+                CellPosition cellPos = new CellPosition(wrappedRow, wrappedCol);
+                SignalGrid.SignalInfo signalInfo = signalGrid.getSignalInfo(cellPos);
+
+// Skip drawing this cell if no signal data exists
+                if (signalInfo == null) {
+                    continue;
+                }
 
                 paint.setColor(getMappedColor(signalInfo.getAverageSignalLevel()));
 
-                // flip rows to have north on top:
-                int flippedRow = mainData.getGridInfo().getRowsCount() - 1 - row;
 
-                canvas.drawRect(
-                        rectangleWidth * column,
-                        rectangleHeight * flippedRow,
-                        rectangleWidth * column + rectangleWidth,
-                        rectangleHeight * flippedRow + rectangleHeight,
-                        paint);
+                // Flip Y axis for drawing, same as before
+                int flippedRow = rowsCount - 1 - wrappedRow;
+
+                int left = offsetX + rectWidth * wrappedCol;
+                int top = offsetY + rectHeight * flippedRow;
+                int right = left + rectWidth;
+                int bottom = top + rectHeight;
+
+                canvas.drawRect(left, top, right, bottom, paint);
             }
+        }
 
+        // Draw current location as a dot
         if (currentLocation != null) {
-            CellPosition currentPosition =
-                    mainData.getGridInfo().computeCellPosition(currentLocation);
+            CellPosition currentPos = gridInfo.computeCellPosition(currentLocation);
+            // Wrap currentPos row and col as well
+            int currentRow = ((currentPos.getRow() % rowsCount) + rowsCount) % rowsCount;
+            int currentCol = ((currentPos.getColumn() % colsCount) + colsCount) % colsCount;
 
-            int currentRow = currentPosition.getRow();
-            int currentColumn = currentPosition.getColumn();
-
-            // flip rows to have north on top:
-            currentRow = mainData.getGridInfo().getRowsCount() - 1 - currentRow;
+            int flippedRow = rowsCount - 1 - currentRow;
 
             paint.setColor(Color.rgb(0, 105, 191));
-
-            canvas.drawCircle(
-                    rectangleWidth * currentColumn + rectangleWidth / 2,
-                    rectangleHeight * currentRow + rectangleHeight / 2,
-                    3,
-                    paint);
+            int cx = offsetX + rectWidth * currentCol + rectWidth / 2;
+            int cy = offsetY + rectHeight * flippedRow + rectHeight / 2;
+            canvas.drawCircle(cx, cy, 3f, paint);
         }
     }
 
-    public void update(WifiNetwork currentWifiNetwork, Location currentLocation) {
-        if (currentWifiNetwork != null)
-            this.currentWifiNetwork = currentWifiNetwork;
-
-        if (currentLocation != null)
-            this.currentLocation = currentLocation;
-
-        invalidate();
-    }
 
     private int getMappedColor(double signalLevel) {
         int redComplement;
-
-        if (signalLevel <= -100.0)
+        if (signalLevel <= -100.0) {
             redComplement = 200;
-
-        else if (signalLevel >= -30.0)
+        } else if (signalLevel >= -30.0) {
             redComplement = 0;
-
-        else
-            redComplement = (int) ( (-20/7.0) * signalLevel -(600/7.0) );
-
-        return Color.rgb(200, redComplement, redComplement);
+        } else {
+            redComplement = (int) ((-20 / 7.0) * signalLevel - (600 / 7.0));
+        }
+        int alpha = 97;
+        return Color.argb(alpha, 200, redComplement, redComplement);
     }
 }

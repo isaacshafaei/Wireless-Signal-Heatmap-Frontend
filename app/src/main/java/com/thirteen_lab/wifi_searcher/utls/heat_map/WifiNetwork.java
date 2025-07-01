@@ -4,6 +4,11 @@ public class WifiNetwork {
     private String bssid;
     private String ssid;
 
+    public WifiNetwork(String bssid, String ssid) {
+        this.bssid = bssid;
+        this.ssid = ssid;
+    }
+
     public String getBssid() {
         return bssid;
     }
@@ -12,35 +17,25 @@ public class WifiNetwork {
         return ssid;
     }
 
-    WifiNetwork(String bssid, String ssid) {
-        this.bssid = bssid;
-        this.ssid = ssid;
-    }
-
     @Override
     public boolean equals(Object o) {
-        if (this == o)
-            return true;
-
-        if (o == null)
-            return false;
-
-        if (getClass() != o.getClass())
-            return false;
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
 
         WifiNetwork other = (WifiNetwork) o;
 
-        return getBssid().equals(other.getBssid()) &&
-                getSsid().equals(other.getSsid());
+        return bssid != null && bssid.equals(other.getBssid()) &&
+                ssid != null && ssid.equals(other.getSsid());
     }
 
     @Override
     public int hashCode() {
-        int result = bssid.hashCode();
-        result = 31 * result + ssid.hashCode();
+        int result = bssid != null ? bssid.hashCode() : 0;
+        result = 31 * result + (ssid != null ? ssid.hashCode() : 0);
         return result;
     }
 
+    @Override
     public String toString() {
         return getSsid() + " (" + getBssid() + ")";
     }

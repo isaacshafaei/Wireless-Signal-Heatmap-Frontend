@@ -50,3 +50,7 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.0'
     implementation 'com.google.code.gson:gson:2.+'
 }
+
+configurations.all {
+    exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+}

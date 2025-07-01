@@ -44,6 +44,7 @@
 
 
 
+    <string name="email">email</string>
     <string name="login">Вход</string>
     <string name="password">Пароль</string>
     <string name="username">Имя пользователя</string>

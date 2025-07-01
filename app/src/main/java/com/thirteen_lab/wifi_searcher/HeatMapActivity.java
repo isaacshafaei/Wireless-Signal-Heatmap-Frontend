@@ -7,7 +7,6 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.*;
@@ -16,71 +15,79 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 
-
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
-import com.google.android.gms.common.api.GoogleApiClient.OnConnectionFailedListener;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
-
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.GeographicalCalculator;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.GridView;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.MainData;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.WifiDetails;
-import com.thirteen_lab.wifi_searcher.utls.heat_map.WifiNetwork;
-
+import com.thirteen_lab.wifi_searcher.utls.heat_map.*;
+import com.thirteen_lab.wifi_searcher.utls.heat_map.GridOverlayView;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class HeatMapActivity extends AppCompatActivity implements ConnectionCallbacks,
-        OnConnectionFailedListener, LocationListener, AdapterView.OnItemSelectedListener {
+public class HeatMapActivity extends AppCompatActivity implements
+        GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener,
+        LocationListener,
+        AdapterView.OnItemSelectedListener {
 
     private static final String TAG = HeatMapActivity.class.getSimpleName();
-    private final static int PLAY_SERVICES_RESOLUTION_REQUEST = 1000;
+    private static final int PLAY_SERVICES_RESOLUTION_REQUEST = 1000;
+
     private Location mLastLocation;
     private GoogleApiClient mGoogleApiClient;
     private boolean mRequestingLocationUpdates = false;
-    private boolean measurementStarted = false;
-
+    private boolean measurementStarted = false;  // <-- Track if measurement started
     private LocationRequest mLocationRequest;
+
     private WifiDetails wifiDetails;
     private WifiManager wifiManager;
 
-    // UI elements
     private Spinner wifiNetworksSpinner;
-    private Button measurementButton;
     private TextView lblLocation;
     private ViewGroup gridViewFrameLayout;
-
     private com.thirteen_lab.wifi_searcher.utls.heat_map.GridView gridView;
+    private HeatmapOverlayView heatmapOverlayView;
 
     private ArrayAdapter<WifiNetwork> wifiNetworksDataAdapter;
-
-    // logic data:
-    private MainData mainData = new MainData();
+    private final MainData mainData = new MainData();
+    private boolean overlayEnabled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_heat_map);
 
-        lblLocation = (TextView) findViewById(R.id.coordinates);
-        wifiNetworksSpinner = (Spinner) findViewById(R.id.wifiNetworksSpinner);
-        gridViewFrameLayout = (ViewGroup) findViewById(R.id.gridViewFrameLayout);
+        ImageView floorPlanImage = findViewById(R.id.floorPlanImage);
+        floorPlanImage.setOnClickListener(v -> {
+            gridView.setVisibility(View.VISIBLE);
+        });
+
+        gridView = findViewById(R.id.gridView);
+        lblLocation = findViewById(R.id.coordinates);
+        wifiNetworksSpinner = findViewById(R.id.wifiNetworksSpinner);
+        gridViewFrameLayout = findViewById(R.id.gridViewFrameLayout);
+        heatmapOverlayView = findViewById(R.id.heatmapOverlay);
 
         wifiNetworksSpinner.setOnItemSelectedListener(this);
-        wifiNetworksDataAdapter = new ArrayAdapter<WifiNetwork>(
-                this, android.R.layout.simple_spinner_item,
-                new ArrayList<WifiNetwork>());
-
+        wifiNetworksDataAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, new ArrayList<>());
         wifiNetworksDataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         wifiNetworksSpinner.setAdapter(wifiNetworksDataAdapter);
 
+        // Important: Set pixel size of grid AFTER layout has been drawn.
+        floorPlanImage.post(() -> {
+            int widthPx = floorPlanImage.getWidth();
+            int heightPx = floorPlanImage.getHeight();
+            if (mainData.getGridInfo() != null) {
+                mainData.getGridInfo().setPixelSize(widthPx, heightPx);
+                Log.d(TAG, "GridInfo pixel size set: " + widthPx + "x" + heightPx);
+            }
+        });
+
+        // Setup Google API client and location request
         if (checkPlayServices()) {
             buildGoogleApiClient();
             createLocationRequest();
@@ -90,52 +97,91 @@ public class HeatMapActivity extends AppCompatActivity implements ConnectionCall
         wifiDetails = new ViewModelProvider(this).get(WifiDetails.class);
         wifiDetails.scanWifi(wifiManager);
 
-        gridView = new GridView(this, mainData);
-        gridViewFrameLayout.addView(gridView);
+        gridView.setMainData(mainData);
+
+        Button scanButton = findViewById(R.id.scanButton);
+        scanButton.setOnClickListener(v -> {
+            CellPosition tappedCell = heatmapOverlayView.getTappedCell();
+            if (tappedCell == null) {
+                Toast.makeText(this, "Please tap on the map first", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            WifiNetwork selectedNetwork = (WifiNetwork) wifiNetworksSpinner.getSelectedItem();
+            if (selectedNetwork == null) {
+                Toast.makeText(this, "Select a WiFi network", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            SignalGrid signalGrid = mainData.getSignalGrids().get(selectedNetwork);
+            GridInfo gridInfo = mainData.getGridInfo();
+
+            if (signalGrid == null || gridInfo == null) {
+                Toast.makeText(this, "Missing data", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            int signalLevel = getCurrentSignalLevel();
+            signalGrid.addSignal(tappedCell, signalLevel);
+            overlayEnabled = true;
+            heatmapOverlayView.setData(gridInfo, signalGrid.getCells());
+            measurementStarted = true;
+
+            Toast.makeText(this, "Signal added at tapped location", Toast.LENGTH_SHORT).show();
+        });
 
         BottomNavigationView bottomNavigationView = findViewById(R.id.bottom_navigation);
         bottomNavigationView.setSelectedItemId(R.id.heatMapWifi);
-        bottomNavigationView.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem menuItem) {
-                switch (menuItem.getItemId()) {
-                    case R.id.accessPoints:
-                        startActivity(new Intent(getApplicationContext(), AccessPointsActivity.class));
-                        overridePendingTransition(0, 0);
-                        return true;
-
-                    case R.id.profile:
-                        startActivity(new Intent(getApplicationContext(), ProfileActivity.class));
-                        overridePendingTransition(0, 0);
-                        return true;
-
-                    case R.id.heatMapWifi:
-                        return true;
-
-                }
-                return false;
+        bottomNavigationView.setOnNavigationItemSelectedListener(item -> {
+            switch (item.getItemId()) {
+                case R.id.accessPoints:
+                    startActivity(new Intent(getApplicationContext(), AccessPointsActivity.class));
+                    overridePendingTransition(0, 0);
+                    return true;
+                case R.id.profile:
+                    startActivity(new Intent(getApplicationContext(), ProfileActivity.class));
+                    overridePendingTransition(0, 0);
+                    return true;
+                case R.id.heatMapWifi:
+                    return true;
             }
+            return false;
         });
 
+
+
+        measurementStarted = false;
+
+        FrameLayout frameLayoutGrid = findViewById(R.id.gridViewFrameLayout);
+        GridOverlayView gridViewSqure = new GridOverlayView(this);
+
+        frameLayoutGrid.addView(gridViewSqure);
     }
 
     @Override
     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
         WifiNetwork wifiNetwork = (WifiNetwork) parent.getItemAtPosition(position);
+        SignalGrid grid = mainData.getSignalGrids().get(wifiNetwork);
+
+// Always clear before updating, to reset previous heatmap and tap
+        heatmapOverlayView.clearData();
+
+        if (measurementStarted && grid != null && mainData.getGridInfo() != null && !grid.getCells().isEmpty()) {
+            heatmapOverlayView.setData(mainData.getGridInfo(), grid.getCells());
+            Log.d(TAG, "Heatmap updated for selected network: " + wifiNetwork.getSsid());
+        }
+
+
         gridView.update(wifiNetwork, null);
     }
 
-    public void onNothingSelected(AdapterView<?> arg0) {
-        // TODO Auto-generated method stub
-    }
+
+    @Override
+    public void onNothingSelected(AdapterView<?> parent) {}
 
     @Override
     protected void onStart() {
         super.onStart();
-
-        mainData.startMeasurement(mLastLocation);
         if (mGoogleApiClient != null) {
-            mRequestingLocationUpdates = true;
             mGoogleApiClient.connect();
         }
     }
@@ -144,17 +190,8 @@ public class HeatMapActivity extends AppCompatActivity implements ConnectionCall
     protected void onResume() {
         super.onResume();
         checkPlayServices();
-
-        if (mGoogleApiClient.isConnected() && mRequestingLocationUpdates) {
+        if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
             startLocationUpdates();
-        }
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (mGoogleApiClient.isConnected()) {
-            mGoogleApiClient.disconnect();
         }
     }
 
@@ -164,51 +201,96 @@ public class HeatMapActivity extends AppCompatActivity implements ConnectionCall
         stopLocationUpdates();
     }
 
-    private void doMeasurement() {
-        if  (!measurementStarted) {
-            measurementStarted = true;
-            mainData.startMeasurement(mLastLocation);
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
+            mGoogleApiClient.disconnect();
+        }
+    }
+
+    private int getCurrentSignalLevel() {
+        List<ScanResult> scanResults = wifiManager.getScanResults();
+        WifiNetwork selected = (WifiNetwork) wifiNetworksSpinner.getSelectedItem();
+        if (selected == null) return -100;
+
+        for (ScanResult result : scanResults) {
+            if (result.SSID.equals(selected.getSsid())) {
+                return result.level;
+            }
         }
 
-        List<ScanResult> scanResults = this.wifiDetails.getScanResults();
+        return -100;
+    }
 
+    /**
+     * This method is triggered on every location update.
+     * It performs measurements and updates heatmap accordingly.
+     */
+    private void doMeasurement() {
+        if (mLastLocation == null) {
+            Log.w(TAG, "Location not available yet for measurement.");
+            return;
+        }
+
+        // Start measurement only once when location and wifi scans are ready
+        if (!measurementStarted) {
+            mainData.startMeasurement(mLastLocation);
+            measurementStarted = true;
+            Log.d(TAG, "Measurement started at location: " + mLastLocation);
+        }
+
+        List<ScanResult> scanResults = wifiDetails.getScanResults();
         List<WifiNetwork> discoveredNetworks = new ArrayList<>();
-        mainData.addMeasurement(mLastLocation, scanResults, discoveredNetworks);
-        updateWifiNetworksSpinner(discoveredNetworks);
 
-        gridView.update(null, null);
+        boolean added = mainData.addMeasurement(mLastLocation, scanResults, discoveredNetworks);
+        if (added) {
+            updateWifiNetworksSpinner(discoveredNetworks);
+            WifiNetwork selectedNetwork = (WifiNetwork) wifiNetworksSpinner.getSelectedItem();
+            updateHeatmap(selectedNetwork);
+//            gridView.update(selectedNetwork, null);
+            Log.d(TAG, "Measurement added and heatmap updated.");
+        } else {
+            Log.w(TAG, "Measurement not added (possibly duplicate data).");
+        }
+    }
+
+    private void updateHeatmap(WifiNetwork network) {
+        if (network == null) return;
+        SignalGrid grid = mainData.getSignalGrids().get(network);
+        if (grid == null) return;
+        heatmapOverlayView.setData(mainData.getGridInfo(), grid.getCells());
     }
 
     private void displayLocation() {
         try {
-            mLastLocation = LocationServices.FusedLocationApi
-                    .getLastLocation(mGoogleApiClient);
+            mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
         } catch (SecurityException e) {
             e.printStackTrace();
         }
 
-
         if (mLastLocation != null) {
             double latitude = mLastLocation.getLatitude();
             double longitude = mLastLocation.getLongitude();
+            String loc = "Lat: " + latitude + ", Lon: " + longitude;
+            lblLocation.setText(loc);
+        }
+    }
 
-            String output = latitude + ", " + longitude;
+    private void updateWifiNetworksSpinner(List<WifiNetwork> discoveredNetworks) {
+        if (discoveredNetworks.isEmpty()) return;
 
-            if (mainData.getGridInfo() != null) {
-                Location centerLocation = mainData.getGridInfo().getCenterLocation();
-
-                if (centerLocation != null) {
-                    output += "\nCenter: " + centerLocation.getLatitude() + ", " + centerLocation.getLongitude();
-
-                    output += "\nNorthwardsOffset (meters) = "
-                            + GeographicalCalculator.InMeters.getNorthwardsDisplacement(centerLocation, mLastLocation);
-
-                    output += "\nEastwardsOffset (meters) = "
-                            + GeographicalCalculator.InMeters.getEastwardsDisplacement(centerLocation, mLastLocation);
-                }
+        boolean newNetworksAdded = false;
+        for (WifiNetwork network : discoveredNetworks) {
+            if (wifiNetworksDataAdapter.getPosition(network) != -1) {
+                continue; // Already in adapter
             }
+            wifiNetworksDataAdapter.add(network);
+            newNetworksAdded = true;
+        }
 
-            lblLocation.setText(output);
+        if (newNetworksAdded) {
+            runOnUiThread(() -> wifiNetworksDataAdapter.notifyDataSetChanged());
         }
     }
 
@@ -216,93 +298,68 @@ public class HeatMapActivity extends AppCompatActivity implements ConnectionCall
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
-                .addApi(LocationServices.API).build();
+                .addApi(LocationServices.API)
+                .build();
     }
 
-    protected void createLocationRequest() {
-        // Location updates intervals in sec
-        final int UPDATE_INTERVAL = 2000; // 2 sec
-        final int FASTEST_INTERVAL = 1000; // 1 sec
-        final int DISPLACEMENT = 1; // 1 meters
-
+    private void createLocationRequest() {
         mLocationRequest = new LocationRequest();
-        mLocationRequest.setInterval(UPDATE_INTERVAL);
-        mLocationRequest.setFastestInterval(FASTEST_INTERVAL);
+        mLocationRequest.setInterval(1000);
+        mLocationRequest.setFastestInterval(1000);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-        mLocationRequest.setSmallestDisplacement(DISPLACEMENT);
-    }
-
-    private boolean checkPlayServices() {
-        int resultCode = GooglePlayServicesUtil
-                .isGooglePlayServicesAvailable(this);
-        if (resultCode != ConnectionResult.SUCCESS) {
-            if (GooglePlayServicesUtil.isUserRecoverableError(resultCode)) {
-                GooglePlayServicesUtil.getErrorDialog(resultCode, this,
-                        PLAY_SERVICES_RESOLUTION_REQUEST).show();
-            } else {
-                Toast.makeText(getApplicationContext(),
-                                "This device is not supported.", Toast.LENGTH_LONG)
-                        .show();
-                finish();
-            }
-            return false;
-        }
-        return true;
     }
 
     protected void startLocationUpdates() {
         try {
             LocationServices.FusedLocationApi.requestLocationUpdates(
                     mGoogleApiClient, mLocationRequest, this);
+            mRequestingLocationUpdates = true;
         } catch (SecurityException e) {
             e.printStackTrace();
         }
-
     }
 
     protected void stopLocationUpdates() {
         LocationServices.FusedLocationApi.removeLocationUpdates(
                 mGoogleApiClient, this);
-    }
-
-    /**
-     * Google api callback methods
-     */
-    @Override
-    public void onConnectionFailed(ConnectionResult result) {
-        Log.i(TAG, "Connection failed: ConnectionResult.getErrorCode() = "
-                + result.getErrorCode());
+        mRequestingLocationUpdates = false;
     }
 
     @Override
-    public void onConnected(Bundle arg0) {
-        // Once connected with google api, get the location
+    public void onConnected(Bundle bundle) {
         displayLocation();
-
-        if (mRequestingLocationUpdates) {
-            startLocationUpdates();
-        }
+        startLocationUpdates();
     }
 
     @Override
-    public void onConnectionSuspended(int arg0) {
-        mGoogleApiClient.connect();
+    public void onConnectionSuspended(int i) {
+        Log.w(TAG, "GoogleApiClient connection suspended");
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        Log.e(TAG, "GoogleApiClient connection failed: " + connectionResult.getErrorMessage());
     }
 
     @Override
     public void onLocationChanged(Location location) {
-        // Assign the new location
         mLastLocation = location;
         displayLocation();
-        gridView.update(null, mLastLocation);
+        wifiDetails.scanWifi(wifiManager);
         doMeasurement();
     }
 
-    private void updateWifiNetworksSpinner(List<WifiNetwork> discoveredNetworks) {
-        for (WifiNetwork discoveredNetwork : discoveredNetworks) {
-            wifiNetworksDataAdapter.add(discoveredNetwork);
+    private boolean checkPlayServices() {
+        int resultCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this);
+        if (resultCode != ConnectionResult.SUCCESS) {
+            if (GooglePlayServicesUtil.isUserRecoverableError(resultCode)) {
+                GooglePlayServicesUtil.getErrorDialog(resultCode, this, PLAY_SERVICES_RESOLUTION_REQUEST).show();
+            } else {
+                Log.i(TAG, "This device is not supported.");
+                finish();
+            }
+            return false;
         }
-
-        wifiNetworksDataAdapter.notifyDataSetChanged();
+        return true;
     }
 }

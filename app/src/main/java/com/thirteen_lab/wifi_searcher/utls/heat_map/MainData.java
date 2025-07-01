@@ -37,7 +37,7 @@ public class MainData {
             }
 
             SignalGrid signalGrid = signalGrids.get(wifiNetwork);
-            signalGrid.addMeasurement(location, scanResult);
+//            signalGrid.addMeasurement(location, scanResult);
         }
 
         return true;
@@ -50,4 +50,13 @@ public class MainData {
     public Map<WifiNetwork, SignalGrid> getSignalGrids() {
         return signalGrids;
     }
+
+    public Map<CellPosition, SignalGrid.SignalInfo> getCells(WifiNetwork wifiNetwork) {
+        SignalGrid grid = signalGrids.get(wifiNetwork);
+        if (grid != null) {
+            return grid.getCells(); // this must exist in SignalGrid.java
+        }
+        return null;
+    }
+
 }

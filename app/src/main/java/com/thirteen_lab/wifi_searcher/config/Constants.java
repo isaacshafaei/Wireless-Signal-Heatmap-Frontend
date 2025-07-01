@@ -4,7 +4,7 @@ package com.thirteen_lab.wifi_searcher.config;
 import android.content.SharedPreferences;
 
 public class Constants {
-    public static final String Base_URL = "http://193.108.113.216:5000/api";
+    public static final String Base_URL = "http://10.0.2.2:5000/api";
     public static final int freqOfTone = 540;
     public static final int updateWifiRate = 1000;
 

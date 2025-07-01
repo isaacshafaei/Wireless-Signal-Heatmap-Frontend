@@ -3,14 +3,29 @@ package com.thirteen_lab.wifi_searcher.utls.heat_map;
 import android.location.Location;
 
 public class GridInfo {
-    private double cellWidth; // as from east to west (in meters)
-    private double cellHeight; // as from north to south (in meters)
+
+    private double cellWidth;  // meters
+    private double cellHeight; // meters
 
     private int columnsCount;
     private int rowsCount;
 
-    // center point of the grid, mapping it to the position on the earth
     private Location centerLocation;
+
+    private int totalPixelWidth;
+    private int totalPixelHeight;
+
+    public GridInfo(Location centerLocation) {
+        this.cellWidth = 10.0;
+        this.cellHeight = 10.0;
+        this.columnsCount = 10;
+        this.rowsCount = 10;
+        this.centerLocation = centerLocation;
+
+        // Default values; should be set later based on screen/map size
+        this.totalPixelWidth = 1000;
+        this.totalPixelHeight = 1000;
+    }
 
     public Location getCenterLocation() {
         return centerLocation;
@@ -33,11 +48,24 @@ public class GridInfo {
     }
 
     public double getWidth() {
-        return cellWidth * (double) columnsCount;
+        return cellWidth * columnsCount;
     }
 
     public double getHeight() {
-        return cellHeight * (double) rowsCount;
+        return cellHeight * rowsCount;
+    }
+
+    public void setPixelSize(int widthPx, int heightPx) {
+        this.totalPixelWidth = widthPx;
+        this.totalPixelHeight = heightPx;
+    }
+
+    public float getCellWidthPx() {
+        return (float) totalPixelWidth / columnsCount;
+    }
+
+    public float getCellHeightPx() {
+        return (float) totalPixelHeight / rowsCount;
     }
 
     public boolean containsCellPosition(CellPosition cellPosition) {
@@ -46,29 +74,15 @@ public class GridInfo {
     }
 
     public CellPosition computeCellPosition(Location location) {
-        Location centerLocation = getCenterLocation();
-
         double yOffset = GeographicalCalculator.InMeters.getNorthwardsDisplacement(centerLocation, location);
         double xOffset = GeographicalCalculator.InMeters.getEastwardsDisplacement(centerLocation, location);
 
         yOffset += getHeight() / 2;
         xOffset += getWidth() / 2;
 
-        int row = (int) (yOffset / getRowsCount());
-        int column = (int) (xOffset / getColumnsCount());
+        int row = (int) (yOffset / cellHeight);
+        int column = (int) (xOffset / cellWidth);
 
         return new CellPosition(row, column);
-    }
-
-    GridInfo(Location centerLocation) {
-        // as for now, let the grid's cells be 10m x 10m
-        cellWidth = 10.0;
-        cellHeight = 10.0;
-
-        // as for now, let it consist of 10 x 10 pieces
-        columnsCount = 10;
-        rowsCount = 10;
-
-        this.centerLocation = centerLocation;
     }
 }

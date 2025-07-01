@@ -16,7 +16,6 @@ public class SignalGrid {
     public SignalGrid(GridInfo gridInfo) {
         this.gridInfo = gridInfo;
 
-        cells.put(null, new SignalInfo());
     }
 
     public void addMeasurement(Location location, ScanResult scanResult) {
@@ -39,11 +38,13 @@ public class SignalGrid {
 
     public SignalInfo getSignalInfo(CellPosition cellPosition) {
         if (!gridInfo.containsCellPosition(cellPosition) ||
-                !cells.containsKey(cellPosition))
-            cellPosition = null;
+                !cells.containsKey(cellPosition)) {
+            return null;  // ⬅ Don't fall back to null key
+        }
 
         return cells.get(cellPosition);
     }
+
 
     public Map<CellPosition, SignalInfo> getCells() {
         return cells;
@@ -86,4 +87,16 @@ public class SignalGrid {
             this.averageSignalLevel = sum / signalLevels.size();
         }
     }
+
+    public void addSignal(CellPosition cell, int signalLevel) {
+        if (cell == null || !gridInfo.containsCellPosition(cell))
+            return;
+
+        if (!cells.containsKey(cell)) {
+            cells.put(cell, new SignalInfo());
+        }
+
+        cells.get(cell).addSignalLevel((double) signalLevel);
+    }
+
 }
