@@ -85,8 +85,12 @@ public class HeatmapOverlayView extends View {
                 if (pos == null || info == null) continue;
 
                 double signal = info.getAverageSignalLevel();
+                if (signal <= 0) continue;  // Skip cells with no valid signal
+
                 int color = getColorForSignal(signal);
                 paint.setColor(color);
+                paint.setAlpha(180); // 0 = fully transparent, 255 = fully opaque
+
 
                 float left = pos.getColumn() * gridInfo.getCellWidthPx();
                 float top = pos.getRow() * gridInfo.getCellHeightPx();
@@ -105,9 +109,19 @@ public class HeatmapOverlayView extends View {
     }
 
     private int getColorForSignal(double signal) {
-        double norm = Math.max(0, Math.min(1, (signal + 100) / 70.0));
-        int red = (int) ((1 - norm) * 255);
-        int green = (int) (norm * 255);
-        return Color.rgb(red, green, 0);
+        // Adjust scale so 30 = red, 100 = green
+        double norm = Math.max(0, Math.min(1, (signal - 30) / 70.0));
+
+        int weakRed = Color.parseColor("#FF0000");
+        int strongGreen = Color.parseColor("#00FF33");
+
+        int r = (int) (Color.red(weakRed) * (1 - norm) + Color.red(strongGreen) * norm);
+        int g = (int) (Color.green(weakRed) * (1 - norm) + Color.green(strongGreen) * norm);
+        int b = (int) (Color.blue(weakRed) * (1 - norm) + Color.blue(strongGreen) * norm);
+
+        return Color.rgb(r, g, b);
     }
+
+
+
 }

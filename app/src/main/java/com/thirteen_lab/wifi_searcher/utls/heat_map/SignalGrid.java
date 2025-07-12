@@ -2,6 +2,7 @@ package com.thirteen_lab.wifi_searcher.utls.heat_map;
 
 import android.location.Location;
 import android.net.wifi.ScanResult;
+import android.net.wifi.WifiManager;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,14 +16,14 @@ public class SignalGrid {
 
     public SignalGrid(GridInfo gridInfo) {
         this.gridInfo = gridInfo;
-
     }
 
     public void addMeasurement(Location location, ScanResult scanResult) {
-        addSignalLevel(gridInfo.computeCellPosition(location), scanResult.level);
+        int level = WifiManager.calculateSignalLevel(scanResult.level, 100); // 0–100 scale
+        addSignalLevel(gridInfo.computeCellPosition(location), level);
     }
 
-    private void addSignalLevel(CellPosition cellPosition, double signalLevel) {
+    private void addSignalLevel(CellPosition cellPosition, int signalLevel) {
         if (cellPosition == null)
             return;
 
@@ -39,12 +40,11 @@ public class SignalGrid {
     public SignalInfo getSignalInfo(CellPosition cellPosition) {
         if (!gridInfo.containsCellPosition(cellPosition) ||
                 !cells.containsKey(cellPosition)) {
-            return null;  // ⬅ Don't fall back to null key
+            return null;
         }
 
         return cells.get(cellPosition);
     }
-
 
     public Map<CellPosition, SignalInfo> getCells() {
         return cells;
@@ -55,15 +55,10 @@ public class SignalGrid {
     }
 
     public class SignalInfo {
-        private final static double DEFAULT_SIGNAL_LEVEL = -100.0;
+        private List<Integer> signalLevels = new ArrayList<>();
+        private double averageSignalLevel = -1; // -1 = no valid data
 
-        private List<Double> signalLevels = new ArrayList<>();
-        private double averageSignalLevel = DEFAULT_SIGNAL_LEVEL;
-
-        public SignalInfo() {
-        }
-
-        public void addSignalLevel(double signalLevel) {
+        public void addSignalLevel(int signalLevel) {
             signalLevels.add(signalLevel);
             updateAverageSignalLevel();
         }
@@ -74,17 +69,16 @@ public class SignalGrid {
 
         private void updateAverageSignalLevel() {
             if (signalLevels.isEmpty()) {
-                averageSignalLevel = DEFAULT_SIGNAL_LEVEL;
+                averageSignalLevel = -1;
                 return;
             }
 
-            double average;
             double sum = 0;
+            for (int level : signalLevels) {
+                sum += level;
+            }
 
-            for (Double signalLevel : signalLevels)
-                sum += signalLevel;
-
-            this.averageSignalLevel = sum / signalLevels.size();
+            averageSignalLevel = sum / signalLevels.size();
         }
     }
 
@@ -96,7 +90,6 @@ public class SignalGrid {
             cells.put(cell, new SignalInfo());
         }
 
-        cells.get(cell).addSignalLevel((double) signalLevel);
+        cells.get(cell).addSignalLevel(signalLevel);
     }
-
 }

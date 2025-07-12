@@ -8,8 +8,8 @@ import android.view.MotionEvent;
 import android.view.View;
 
 public class GridOverlayView extends View {
-    private int numRows = 16;
-    private int numCols = 16;
+    private int numRows = 15;
+    private int numCols = 15;
     private Paint linePaint;
 
     public GridOverlayView(Context context) {

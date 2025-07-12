@@ -6,7 +6,7 @@
 
 
 
-    <string name="app_name">TestWifi</string>
+    <string name="app_name">Signal Map</string>
     <string name="not_scanned_yet">No WiFi Scans Yet...</string>
     <string name="no_ap_available">No WiFi APs available nearby</string>
     <string name="turn_on_wifi">Please turn on WiFi</string>
@@ -56,13 +56,13 @@
     <string name="login">Login</string>
     <string name="password">Password</string>
     <string name="username">Username</string>
-    <string name="ok">OK</string>
+    <string name="ok">Login</string>
     <string name="scan">SCAN</string>
     <string name="access_points">Access points</string>
     <string name="profile">Profile</string>
     <string name="heatmap">Heatmap</string>
     <string name="actions_history">Actions History</string>
-    <string name="coordinates">Coordinates</string>
+    <string name="coordinates">Signal Guide</string>
     <string name="recommended_value_1000ms">Recommended value: ~1000ms</string>
     <string name="sound_frequency">Sound frequency</string>
     <string name="update_rate">Update Rate</string>

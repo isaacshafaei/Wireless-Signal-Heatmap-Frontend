@@ -157,15 +157,17 @@ public class LoginActivity extends AppCompatActivity {
 
                         Intent intent = new Intent(getBaseContext(), AccessPointsActivity.class);
                         startActivity(intent);
+                        finish(); // Don't forget this
                     } catch (JSONException e) {
                         e.printStackTrace();
+                        loginBtn.setVisibility(View.VISIBLE); // <-- ADD THIS
                     }
                 }
             }, new Response.ErrorListener() {
                 @Override
                 public void onErrorResponse(VolleyError error) {
                     Toast.makeText(getBaseContext(), "An error has occurred! Please log in", Toast.LENGTH_SHORT).show();
-                    loginBtn.setVisibility(View.VISIBLE);
+                    loginBtn.setVisibility(View.VISIBLE); // <-- KEEP THIS
                 }
             });
 

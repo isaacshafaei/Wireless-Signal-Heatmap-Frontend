@@ -22,11 +22,34 @@ import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.thirteen_lab.wifi_searcher.config.Constants;
 import com.thirteen_lab.wifi_searcher.utls.heat_map.*;
 import com.thirteen_lab.wifi_searcher.utls.heat_map.GridOverlayView;
 
 import java.util.ArrayList;
 import java.util.List;
+import android.net.Uri;
+import androidx.annotation.Nullable;
+import com.google.gson.Gson;
+import android.graphics.Bitmap;
+import java.io.ByteArrayOutputStream;
+import android.util.Base64;
+import org.json.JSONObject;
+import org.json.JSONException;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.Request;
+import com.android.volley.toolbox.Volley;
+import android.os.Build;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import java.io.File;
+import android.os.Environment;
+import android.media.MediaScannerConnection;
+import java.io.IOException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+
 
 public class HeatMapActivity extends AppCompatActivity implements
         GoogleApiClient.ConnectionCallbacks,
@@ -47,7 +70,6 @@ public class HeatMapActivity extends AppCompatActivity implements
     private WifiManager wifiManager;
 
     private Spinner wifiNetworksSpinner;
-    private TextView lblLocation;
     private ViewGroup gridViewFrameLayout;
     private com.thirteen_lab.wifi_searcher.utls.heat_map.GridView gridView;
     private HeatmapOverlayView heatmapOverlayView;
@@ -56,18 +78,36 @@ public class HeatMapActivity extends AppCompatActivity implements
     private final MainData mainData = new MainData();
     private boolean overlayEnabled = false;
 
+    private static final int PICK_IMAGE_REQUEST = 1;
+    private ImageView floorPlanImage;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_heat_map);
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+            }
+        }
 
-        ImageView floorPlanImage = findViewById(R.id.floorPlanImage);
+
+        floorPlanImage = findViewById(R.id.floorPlanImage); // Use the class-level variable
+
         floorPlanImage.setOnClickListener(v -> {
             gridView.setVisibility(View.VISIBLE);
         });
 
+        // Optional: Add a button to pick the image
+        Button pickImageButton = findViewById(R.id.pickImageButton);
+        pickImageButton.setOnClickListener(v -> openImagePicker());
+
+        Button saveButton = findViewById(R.id.saveButton);
+        saveButton.setOnClickListener(v -> captureAndSaveHeatmap());
+
+
         gridView = findViewById(R.id.gridView);
-        lblLocation = findViewById(R.id.coordinates);
         wifiNetworksSpinner = findViewById(R.id.wifiNetworksSpinner);
         gridViewFrameLayout = findViewById(R.id.gridViewFrameLayout);
         heatmapOverlayView = findViewById(R.id.heatmapOverlay);
@@ -76,6 +116,7 @@ public class HeatMapActivity extends AppCompatActivity implements
         wifiNetworksDataAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, new ArrayList<>());
         wifiNetworksDataAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         wifiNetworksSpinner.setAdapter(wifiNetworksDataAdapter);
+
 
         // Important: Set pixel size of grid AFTER layout has been drawn.
         floorPlanImage.post(() -> {
@@ -151,11 +192,132 @@ public class HeatMapActivity extends AppCompatActivity implements
 
         measurementStarted = false;
 
-        FrameLayout frameLayoutGrid = findViewById(R.id.gridViewFrameLayout);
-        GridOverlayView gridViewSqure = new GridOverlayView(this);
-
-        frameLayoutGrid.addView(gridViewSqure);
+//        FrameLayout frameLayoutGrid = findViewById(R.id.gridViewFrameLayout);
+//        GridOverlayView gridViewSqure = new GridOverlayView(this);
+//
+//        frameLayoutGrid.addView(gridViewSqure);
     }
+
+    private void captureAndSaveHeatmap() {
+        FrameLayout heatmapLayout = findViewById(R.id.gridViewFrameLayout);
+        heatmapLayout.setDrawingCacheEnabled(true);
+        Bitmap bitmap = Bitmap.createBitmap(heatmapLayout.getDrawingCache());
+        heatmapLayout.setDrawingCacheEnabled(false);
+
+        // Save to Pictures directory
+        String filename = "heatmap_" + System.currentTimeMillis() + ".png";
+        File directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        File file = new File(directory, filename);
+
+        try {
+            FileOutputStream out = new FileOutputStream(file);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            out.flush();
+            out.close();
+
+            // Make it appear in Gallery
+            MediaScannerConnection.scanFile(this,
+                    new String[]{file.getAbsolutePath()},
+                    new String[]{"image/png"},
+                    null);
+
+            Toast.makeText(this, "Heatmap saved to gallery", Toast.LENGTH_SHORT).show();
+        } catch (IOException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Failed to save heatmap", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+
+    private void saveHeatmapData() {
+        WifiNetwork selectedNetwork = (WifiNetwork) wifiNetworksSpinner.getSelectedItem();
+        if (selectedNetwork == null || floorPlanImage.getDrawable() == null) {
+            Toast.makeText(this, "Select a network and floor plan first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        SignalGrid signalGrid = mainData.getSignalGrids().get(selectedNetwork);
+        GridInfo gridInfo = mainData.getGridInfo();
+
+        if (signalGrid == null || gridInfo == null) {
+            Toast.makeText(this, "Heatmap data missing", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Serialize using Gson
+        Gson gson = new Gson();
+        String gridJson = gson.toJson(gridInfo);
+        String signalJson = gson.toJson(signalGrid);
+
+        // Convert image to Base64
+        floorPlanImage.setDrawingCacheEnabled(true);
+        Bitmap bitmap = Bitmap.createBitmap(floorPlanImage.getDrawingCache());
+        floorPlanImage.setDrawingCacheEnabled(false);
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
+        String imageBase64 = Base64.encodeToString(baos.toByteArray(), Base64.DEFAULT);
+
+        // Send to backend (pseudo call)
+        sendHeatmapToServer(selectedNetwork.getSsid(), gridJson, signalJson, imageBase64);
+    }
+
+    private void sendHeatmapToServer(String ssid, String gridInfoJson, String signalGridJson, String imageBase64) {
+        String url = Constants.Base_URL+"/heatmap/save"; // replace with your real URL
+
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("user_id", 1);  // replace with real user ID
+            payload.put("ssid", ssid);
+            payload.put("grid_info", new JSONObject(gridInfoJson));
+            payload.put("signal_grid", new JSONObject(signalGridJson));
+            payload.put("floor_plan_image", imageBase64);
+        } catch (JSONException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        JsonObjectRequest request = new JsonObjectRequest(
+                Request.Method.POST,
+                url,
+                payload,
+                response -> Toast.makeText(this, "Heatmap saved!", Toast.LENGTH_SHORT).show(),
+                error -> Toast.makeText(this, "Save failed: " + error.getMessage(), Toast.LENGTH_LONG).show()
+        );
+
+        Volley.newRequestQueue(this).add(request);
+    }
+
+
+    private String getConnectedSSID(Context context) {
+        WifiManager wifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        if (wifiManager != null && wifiManager.getConnectionInfo() != null) {
+            String ssid = wifiManager.getConnectionInfo().getSSID();
+            if (ssid != null && ssid.length() > 1 && ssid.startsWith("\"") && ssid.endsWith("\"")) {
+                ssid = ssid.substring(1, ssid.length() - 1); // Remove quotes
+            }
+            return ssid;
+        }
+        return null;
+    }
+
+
+    private void openImagePicker() {
+        Intent intent = new Intent(Intent.ACTION_PICK);
+        intent.setType("image/*");
+        startActivityForResult(intent, PICK_IMAGE_REQUEST);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri imageUri = data.getData();
+            floorPlanImage.setImageURI(imageUri);
+        }
+    }
+
 
     @Override
     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -216,12 +378,16 @@ public class HeatMapActivity extends AppCompatActivity implements
 
         for (ScanResult result : scanResults) {
             if (result.SSID.equals(selected.getSsid())) {
-                return result.level;
+                int level = result.level;
+                int normalized = Math.max(0, Math.min(100, 2 * (level + 100))); // -100 dBm → 0, -50 dBm → 100
+                return normalized;
             }
         }
 
         return -100;
     }
+
+
 
     /**
      * This method is triggered on every location update.
@@ -246,6 +412,17 @@ public class HeatMapActivity extends AppCompatActivity implements
         boolean added = mainData.addMeasurement(mLastLocation, scanResults, discoveredNetworks);
         if (added) {
             updateWifiNetworksSpinner(discoveredNetworks);
+            String selectedSSID = getConnectedSSID(this);
+            if (selectedSSID != null) {
+                for (int i = 0; i < wifiNetworksDataAdapter.getCount(); i++) {
+                    WifiNetwork network = wifiNetworksDataAdapter.getItem(i);
+                    if (network != null && selectedSSID.equals(network.getSsid())) {
+                        wifiNetworksSpinner.setSelection(i);
+                        Log.d("HeatmapActivity", "Selected WiFi in spinner: " + selectedSSID);
+                        break;
+                    }
+                }
+            }
             WifiNetwork selectedNetwork = (WifiNetwork) wifiNetworksSpinner.getSelectedItem();
             updateHeatmap(selectedNetwork);
 //            gridView.update(selectedNetwork, null);
@@ -269,12 +446,6 @@ public class HeatMapActivity extends AppCompatActivity implements
             e.printStackTrace();
         }
 
-        if (mLastLocation != null) {
-            double latitude = mLastLocation.getLatitude();
-            double longitude = mLastLocation.getLongitude();
-            String loc = "Lat: " + latitude + ", Lon: " + longitude;
-            lblLocation.setText(loc);
-        }
     }
 
     private void updateWifiNetworksSpinner(List<WifiNetwork> discoveredNetworks) {
