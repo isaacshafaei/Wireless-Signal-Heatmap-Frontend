@@ -1,7 +1,7 @@
 # Demo
 
-![Wi-Fi Heatmap](screenshot/login.jpg/heatmap.png)
-![Wi-Fi Heatmap](screenshot/register.jpg/heatmap.png)
+![Login page](screenshot/login.jpg)
+![Register page](screenshot/register.jpg)
 
 # WiFi Signal Strength
 
