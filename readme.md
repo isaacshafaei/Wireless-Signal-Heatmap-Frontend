@@ -9,7 +9,7 @@
   <tr>
     <td><img src="screenshot/wifis.jpg" alt="Login page" width="250"/></td>
     <td><img src="screenshot/filter.jpg" alt="Register page" width="250"/></td>
-    <td><img src="screenshot/empty-wifi.jpg" alt="Another page" width="250"/></td>
+    <td><img src="screenshot/setting.jpg" alt="Another page" width="250"/></td>
   </tr>
     <tr>
     <td><img src="screenshot/profile.jpg" alt="Login page" width="250"/></td>
