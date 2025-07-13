@@ -74,4 +74,5 @@ cd wifi-signal-strength-android
 - Launch the application
 
 _Backend - https://github.com/isaacshafaei/Wireless-Signal-Heatmap-Backend_
+
 **Important Note**: If you want to run this application on your phone without setting up localhost and PostgreSQL locally, you can deploy the backend on Render.com and connect the frontend to the deployed backend.
