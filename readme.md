@@ -53,14 +53,14 @@
 ### Prerequisites
 
 - Android Studio SDK
-- [Server](https://github.com/Bioneisme/wifi-signal-strength-backend)
+- [Server](https://github.com/isaacshafaei/Wireless-Signal-Heatmap-Backend)
 
 ### Installing
 
 - Get the latest snapshot
 
 ```bash
-git clone https://github.com/Bioneisme/wifi-signal-strength-android.git
+git clone https://github.com/isaacshafaei/Wireless-Signal-Heatmap-Frontend.git
 ```
 
 - Change directory
@@ -73,4 +73,5 @@ cd wifi-signal-strength-android
 - Change the Base_URL in the config folder of the backend server to your own
 - Launch the application
 
-_Backend - https://github.com/Bioneisme/wifi-signal-strength-backend_
+_Backend - https://github.com/isaacshafaei/Wireless-Signal-Heatmap-Backend_
+**Important Note**: If you want to run this application on your phone without setting up localhost and PostgreSQL locally, you can deploy the backend on Render.com and connect the frontend to the deployed backend.
