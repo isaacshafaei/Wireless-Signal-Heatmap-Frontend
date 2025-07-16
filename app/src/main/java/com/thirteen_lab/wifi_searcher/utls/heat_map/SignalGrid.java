@@ -19,9 +19,20 @@ public class SignalGrid {
     }
 
     public void addMeasurement(Location location, ScanResult scanResult) {
-        int level = WifiManager.calculateSignalLevel(scanResult.level, 100); // 0–100 scale
-        addSignalLevel(gridInfo.computeCellPosition(location), level);
+        if (location == null || scanResult == null) return;
+
+        CellPosition cell = gridInfo.computeCellPosition(location);
+        if (!gridInfo.containsCellPosition(cell)) {
+            // Invalid cell, do not add
+            return;
+        }
+
+        int level = scanResult.level;  // use raw dBm value, not calculateSignalLevel()
+        if (level > -100 && level <= 0) {
+            addSignalLevel(cell, level);
+        }
     }
+
 
     private void addSignalLevel(CellPosition cellPosition, int signalLevel) {
         if (cellPosition == null)

@@ -109,11 +109,12 @@ public class HeatmapOverlayView extends View {
     }
 
     private int getColorForSignal(double signal) {
-        // Adjust scale so 30 = red, 100 = green
-        double norm = Math.max(0, Math.min(1, (signal - 30) / 70.0));
+        // signal: -100 (weak) to -30 (strong)
+        double norm = (signal + 100) / 70.0;
+        norm = Math.max(0, Math.min(1, norm)); // clamp between 0 and 1
 
-        int weakRed = Color.parseColor("#FF0000");
-        int strongGreen = Color.parseColor("#00FF33");
+        int weakRed = Color.parseColor("#FF0000");   // red = weak
+        int strongGreen = Color.parseColor("#00FF33"); // green = strong
 
         int r = (int) (Color.red(weakRed) * (1 - norm) + Color.red(strongGreen) * norm);
         int g = (int) (Color.green(weakRed) * (1 - norm) + Color.green(strongGreen) * norm);
@@ -121,6 +122,7 @@ public class HeatmapOverlayView extends View {
 
         return Color.rgb(r, g, b);
     }
+
 
 
 

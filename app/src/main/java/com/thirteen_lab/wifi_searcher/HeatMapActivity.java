@@ -192,10 +192,6 @@ public class HeatMapActivity extends AppCompatActivity implements
 
         measurementStarted = false;
 
-//        FrameLayout frameLayoutGrid = findViewById(R.id.gridViewFrameLayout);
-//        GridOverlayView gridViewSqure = new GridOverlayView(this);
-//
-//        frameLayoutGrid.addView(gridViewSqure);
     }
 
     private void captureAndSaveHeatmap() {
